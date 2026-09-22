@@ -1,4 +1,4 @@
-.PHONY: help build run test test-race docker-up docker-down docker-logs clean
+.PHONY: help build run seed test test-race docker-up docker-down docker-logs clean
 
 help: ## Display available commands
 	@echo "Available commands:"
@@ -9,6 +9,9 @@ build: ## Compile binary into bin/server
 
 run: ## Run application locally
 	go run ./cmd/api
+
+seed: ## Seed database with sample users, teams, and tasks
+	go run ./cmd/seed
 
 test: ## Run all unit tests
 	go test -v ./...

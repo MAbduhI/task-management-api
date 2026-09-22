@@ -123,11 +123,23 @@ docker compose up --build -d
 docker compose logs -f app
 ```
 The API is available at `http://localhost:8080`.
+The database is automatically pre-seeded with initial users, teams, and sample tasks.
+
+### Default Seed Accounts (Password: `password123`)
+| Email | Team | Role | Notes |
+|---|---|---|---|
+| `alice@example.com` | Backend Engineering | ADMIN | Can assign tasks to Bob & Charlie |
+| `bob@example.com` | Backend Engineering | MEMBER | In Alice's team |
+| `charlie@example.com` | Backend Engineering | MEMBER | In Alice's team |
+| `david@example.com` | Product Management | ADMIN | Different team (useful to test cross-team rejection) |
 
 ### Running Locally
 ```bash
 # Copy environment configuration
 cp .env.example .env
+
+# Run database seeder (Optional if running outside Docker)
+make seed
 
 # Run unit tests (No external DB/Redis required)
 make test
@@ -209,10 +221,22 @@ docker compose up --build -d
 docker compose logs -f app
 ```
 Aplikasi berjalan pada port `http://localhost:8080`.
+Database otomatis terisi data awal (users, teams, tasks) saat container pertama kali dijalankan.
+
+### Akun Awal / Seed (Password: `password123`)
+| Email | Tim | Role | Keterangan |
+|---|---|---|---|
+| `alice@example.com` | Backend Engineering | ADMIN | Bisa assign task ke Bob & Charlie |
+| `bob@example.com` | Backend Engineering | MEMBER | Satu tim dengan Alice |
+| `charlie@example.com` | Backend Engineering | MEMBER | Satu tim dengan Alice |
+| `david@example.com` | Product Management | ADMIN | Beda tim (untuk uji validasi beda tim) |
 
 ### Menjalankan Unit Test Mandiri
 Unit test tidak membutuhkan koneksi database atau Redis aktif (menggunakan mock thread-safe in-memory store):
 ```bash
+# Seed database jika dijalankan di luar docker
+make seed
+
 # Jalankan seluruh unit test
 make test
 
