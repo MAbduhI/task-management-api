@@ -25,6 +25,7 @@ type Config struct {
 	JWTSecret      string
 	JWTExpiryHours int
 	IdempotencyTTL time.Duration
+	AdminKey       string
 }
 
 func Load() *Config {
@@ -47,6 +48,7 @@ func Load() *Config {
 		JWTSecret:      getEnv("JWT_SECRET", "super-secret-jwt-key-replace-in-production"),
 		JWTExpiryHours: getEnvAsInt("JWT_EXPIRY_HOURS", 24),
 		IdempotencyTTL: 24 * time.Hour,
+		AdminKey:       getEnv("ADMIN_KEY", "admin-secret-key-123"),
 	}
 }
 

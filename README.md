@@ -126,6 +126,8 @@ The API is available at `http://localhost:8080`.
 The database is automatically pre-seeded with initial users, teams, and sample tasks.
 
 ### Default Seed Accounts (Password: `password123`)
+> Full visual hierarchy, entity trees, and cross-team test scenarios are detailed in [docs/SEEDER_HIERARCHY.md](docs/SEEDER_HIERARCHY.md).
+
 | Email | Team | Role | Notes |
 |---|---|---|---|
 | `alice@example.com` | Backend Engineering | ADMIN | Can assign tasks to Bob & Charlie |
@@ -224,6 +226,8 @@ Aplikasi berjalan pada port `http://localhost:8080`.
 Database otomatis terisi data awal (users, teams, tasks) saat container pertama kali dijalankan.
 
 ### Akun Awal / Seed (Password: `password123`)
+> Penjelasan lengkap diagram hierarki, relasi tabel, dan skenario pengujian tim dapat dilihat di [docs/SEEDER_HIERARCHY.md](docs/SEEDER_HIERARCHY.md).
+
 | Email | Tim | Role | Keterangan |
 |---|---|---|---|
 | `alice@example.com` | Backend Engineering | ADMIN | Bisa assign task ke Bob & Charlie |

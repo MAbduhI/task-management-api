@@ -9,6 +9,7 @@ import (
 	"github.com/MAbduhI/task-management-api/internal/domain"
 	"github.com/MAbduhI/task-management-api/internal/pkg/jwt"
 	"github.com/MAbduhI/task-management-api/internal/pkg/password"
+	"github.com/MAbduhI/task-management-api/internal/pkg/sanitize"
 )
 
 type RegisterInput struct {
@@ -54,7 +55,10 @@ func NewAuthUsecase(userRepo domain.UserRepository, jwtSecret string, jwtExpiryH
 }
 
 func (u *authUsecase) Register(ctx context.Context, in RegisterInput) (*AuthResponse, error) {
-	existing, err := u.userRepo.GetByEmail(ctx, in.Email)
+	email := sanitize.Email(in.Email)
+	name := sanitize.Text(in.Name)
+
+	existing, err := u.userRepo.GetByEmail(ctx, email)
 	if err == nil && existing != nil {
 		return nil, domain.ErrConflictCustom("EMAIL_ALREADY_EXISTS", "Email is already registered")
 	}
@@ -66,8 +70,8 @@ func (u *authUsecase) Register(ctx context.Context, in RegisterInput) (*AuthResp
 
 	user := &domain.User{
 		UUID:         uuid.New(),
-		Name:         in.Name,
-		Email:        in.Email,
+		Name:         name,
+		Email:        email,
 		PasswordHash: hashed,
 	}
 
@@ -93,7 +97,8 @@ func (u *authUsecase) Register(ctx context.Context, in RegisterInput) (*AuthResp
 }
 
 func (u *authUsecase) Login(ctx context.Context, in LoginInput) (*AuthResponse, error) {
-	user, err := u.userRepo.GetByEmail(ctx, in.Email)
+	email := sanitize.Email(in.Email)
+	user, err := u.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, domain.ErrUnauth("Invalid email or password")
 	}

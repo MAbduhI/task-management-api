@@ -9,10 +9,11 @@ import (
 )
 
 type RouterConfig struct {
-	JWTSecret   string
-	AuthHandler *AuthHandler
-	TeamHandler *TeamHandler
-	TaskHandler *TaskHandler
+	JWTSecret     string
+	AuthHandler   *AuthHandler
+	TeamHandler   *TeamHandler
+	TaskHandler   *TaskHandler
+	SystemHandler *SystemHandler
 }
 
 func SetupRouter(cfg RouterConfig) *gin.Engine {
@@ -28,6 +29,17 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// System / Maintenance routes
+	if cfg.SystemHandler != nil {
+		system := r.Group("/system")
+		{
+			system.POST("/migrate/up", cfg.SystemHandler.MigrateUp)
+			system.POST("/migrate/down", cfg.SystemHandler.MigrateDown)
+			system.POST("/seed/up", cfg.SystemHandler.SeedUp)
+			system.POST("/seed/down", cfg.SystemHandler.SeedDown)
+		}
+	}
 
 	// Public auth routes
 	auth := r.Group("/auth")

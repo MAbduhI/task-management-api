@@ -11,6 +11,7 @@ import (
 
 	"github.com/MAbduhI/task-management-api/internal/domain"
 	"github.com/MAbduhI/task-management-api/internal/pkg/notification"
+	"github.com/MAbduhI/task-management-api/internal/pkg/sanitize"
 	"github.com/MAbduhI/task-management-api/internal/repository/postgres"
 )
 
@@ -84,7 +85,16 @@ func (u *taskUsecase) Create(ctx context.Context, currentUserID int64, idempoten
 		}
 	}
 
-	// 2. Validate status
+	// 2. Sanitize & Validate input
+	title := sanitize.Text(in.Title)
+	if title == "" {
+		if idempotencyKey != "" && u.idempotencyStore != nil {
+			_ = u.idempotencyStore.Release(ctx, idempotencyKey, currentUserID)
+		}
+		return nil, false, domain.ErrBadReq("VALIDATION_ERROR", "Task title cannot be empty", nil)
+	}
+	description := sanitize.Text(in.Description)
+
 	status := in.Status
 	if status == "" {
 		status = domain.TaskStatusTodo
@@ -98,8 +108,8 @@ func (u *taskUsecase) Create(ctx context.Context, currentUserID int64, idempoten
 	// 3. Persist task
 	task := &domain.Task{
 		UUID:        uuid.New(),
-		Title:       in.Title,
-		Description: in.Description,
+		Title:       title,
+		Description: description,
 		Status:      status,
 		CreatedBy:   currentUserID,
 	}
@@ -139,6 +149,8 @@ func (u *taskUsecase) Create(ctx context.Context, currentUserID int64, idempoten
 }
 
 func (u *taskUsecase) List(ctx context.Context, query domain.ListTaskQuery) (*domain.TaskListResult, error) {
+	query.Search = sanitize.Text(query.Search)
+	query.Status = sanitize.Text(query.Status)
 	return u.taskRepo.List(ctx, query)
 }
 
@@ -169,8 +181,13 @@ func (u *taskUsecase) Update(ctx context.Context, currentUserID int64, taskUUID 
 		return nil, domain.ErrBadReq("INVALID_STATUS", "Invalid task status. Allowed: TODO, IN_PROGRESS, DONE", nil)
 	}
 
-	task.Title = in.Title
-	task.Description = in.Description
+	title := sanitize.Text(in.Title)
+	if title == "" {
+		return nil, domain.ErrBadReq("VALIDATION_ERROR", "Task title cannot be empty", nil)
+	}
+
+	task.Title = title
+	task.Description = sanitize.Text(in.Description)
 	task.Status = in.Status
 
 	if err := u.taskRepo.Update(ctx, task); err != nil {

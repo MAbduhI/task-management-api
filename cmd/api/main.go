@@ -114,12 +114,14 @@ func main() {
 	authHandler := delivery.NewAuthHandler(authUsecase)
 	teamHandler := delivery.NewTeamHandler(teamUsecase)
 	taskHandler := delivery.NewTaskHandler(taskUsecase)
+	systemHandler := delivery.NewSystemHandler(db, cfg.AdminKey)
 
 	router := delivery.SetupRouter(delivery.RouterConfig{
-		JWTSecret:   cfg.JWTSecret,
-		AuthHandler: authHandler,
-		TeamHandler: teamHandler,
-		TaskHandler: taskHandler,
+		JWTSecret:     cfg.JWTSecret,
+		AuthHandler:   authHandler,
+		TeamHandler:   teamHandler,
+		TaskHandler:   taskHandler,
+		SystemHandler: systemHandler,
 	})
 
 	srv := &http.Server{

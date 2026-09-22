@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MAbduhI/task-management-api/internal/domain"
+	"github.com/MAbduhI/task-management-api/internal/pkg/sanitize"
 )
 
 type CreateTeamInput struct {
@@ -41,9 +42,14 @@ func NewTeamUsecase(teamRepo domain.TeamRepository, userRepo domain.UserReposito
 }
 
 func (u *teamUsecase) CreateTeam(ctx context.Context, userID int64, in CreateTeamInput) (*domain.Team, error) {
+	name := sanitize.Text(in.Name)
+	if name == "" {
+		return nil, domain.ErrBadReq("VALIDATION_ERROR", "Team name cannot be empty", nil)
+	}
+
 	team := &domain.Team{
 		UUID: uuid.New(),
-		Name: in.Name,
+		Name: name,
 	}
 	if err := u.teamRepo.Create(ctx, team); err != nil {
 		return nil, domain.ErrInternal(err)
