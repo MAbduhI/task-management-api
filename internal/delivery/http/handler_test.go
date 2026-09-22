@@ -81,7 +81,8 @@ func TestTaskCreation_WithIdempotencyHeader(t *testing.T) {
 	txManager := mock.NewMockTxManager(taskRepo, taskLogRepo)
 	idempStore := memory.NewMemoryIdempotencyStore()
 
-	taskUc := usecase.NewTaskUsecase(taskRepo, taskLogRepo, userRepo, teamRepo, idempStore, txManager, notifier, 24*time.Hour)
+	taskCache := mock.NewMockTaskCache()
+	taskUc := usecase.NewTaskUsecase(taskRepo, taskLogRepo, userRepo, teamRepo, idempStore, taskCache, txManager, notifier, 24*time.Hour)
 	taskHandler := NewTaskHandler(taskUc)
 
 	router := SetupRouter(RouterConfig{

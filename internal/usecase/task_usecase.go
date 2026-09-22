@@ -30,6 +30,7 @@ type taskUsecase struct {
 	userRepo         domain.UserRepository
 	teamRepo         domain.TeamRepository
 	idempotencyStore domain.IdempotencyStore
+	taskCache        domain.TaskCache
 	txManager        postgres.TxManager
 	notifier         notification.Notifier
 	idempotencyTTL   time.Duration
@@ -41,6 +42,7 @@ func NewTaskUsecase(
 	userRepo domain.UserRepository,
 	teamRepo domain.TeamRepository,
 	idempotencyStore domain.IdempotencyStore,
+	taskCache domain.TaskCache,
 	txManager postgres.TxManager,
 	notifier notification.Notifier,
 	idempotencyTTL time.Duration,
@@ -54,6 +56,7 @@ func NewTaskUsecase(
 		userRepo:         userRepo,
 		teamRepo:         teamRepo,
 		idempotencyStore: idempotencyStore,
+		taskCache:        taskCache,
 		txManager:        txManager,
 		notifier:         notifier,
 		idempotencyTTL:   idempotencyTTL,
@@ -155,6 +158,15 @@ func (u *taskUsecase) List(ctx context.Context, query domain.ListTaskQuery) (*do
 }
 
 func (u *taskUsecase) GetByUUID(ctx context.Context, currentUserID int64, taskUUID uuid.UUID) (*domain.TaskResponse, error) {
+	if u.taskCache != nil {
+		if cached, _ := u.taskCache.Get(ctx, taskUUID); cached != nil {
+			user, _ := u.userRepo.GetByID(ctx, currentUserID)
+			if user != nil && (cached.CreatorUUID == user.UUID || (cached.AssigneeUUID != nil && *cached.AssigneeUUID == user.UUID)) {
+				return cached, nil
+			}
+		}
+	}
+
 	task, err := u.taskRepo.GetByUUID(ctx, taskUUID)
 	if err != nil {
 		return nil, domain.ErrNotFoundCustom("TASK_NOT_FOUND", "Task not found")
@@ -164,7 +176,11 @@ func (u *taskUsecase) GetByUUID(ctx context.Context, currentUserID int64, taskUU
 		return nil, domain.ErrForbid("You do not have access to this task")
 	}
 
-	return u.mapTaskToResponse(task), nil
+	resp := u.mapTaskToResponse(task)
+	if u.taskCache != nil {
+		_ = u.taskCache.Set(ctx, resp, 10*time.Minute)
+	}
+	return resp, nil
 }
 
 func (u *taskUsecase) Update(ctx context.Context, currentUserID int64, taskUUID uuid.UUID, in domain.UpdateTaskInput) (*domain.TaskResponse, error) {
@@ -194,6 +210,11 @@ func (u *taskUsecase) Update(ctx context.Context, currentUserID int64, taskUUID 
 		return nil, domain.ErrInternal(err)
 	}
 
+	// Invalidate Redis cache on update
+	if u.taskCache != nil {
+		_ = u.taskCache.Delete(ctx, taskUUID)
+	}
+
 	return u.mapTaskToResponse(task), nil
 }
 
@@ -207,7 +228,16 @@ func (u *taskUsecase) Delete(ctx context.Context, currentUserID int64, taskUUID 
 		return domain.ErrForbid("Only the task creator can delete this task")
 	}
 
-	return u.taskRepo.Delete(ctx, task.ID)
+	if err := u.taskRepo.Delete(ctx, task.ID); err != nil {
+		return domain.ErrInternal(err)
+	}
+
+	// Invalidate Redis cache on delete
+	if u.taskCache != nil {
+		_ = u.taskCache.Delete(ctx, taskUUID)
+	}
+
+	return nil
 }
 
 func (u *taskUsecase) Assign(ctx context.Context, currentUserID int64, taskUUID uuid.UUID, assigneeUUID uuid.UUID) (*domain.TaskResponse, error) {
@@ -276,6 +306,11 @@ func (u *taskUsecase) Assign(ctx context.Context, currentUserID int64, taskUUID 
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Invalidate Redis cache on assign
+	if u.taskCache != nil {
+		_ = u.taskCache.Delete(ctx, taskUUID)
 	}
 
 	return updatedTask, nil

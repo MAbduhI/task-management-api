@@ -22,6 +22,7 @@ func setupTestEnvironment() (
 	*mock.MockTaskLogRepo,
 	*mock.MockNotifier,
 	*mock.MockTxManager,
+	*mock.MockTaskCache,
 ) {
 	taskRepo := mock.NewMockTaskRepo()
 	userRepo := mock.NewMockUserRepo()
@@ -30,6 +31,7 @@ func setupTestEnvironment() (
 	notifier := &mock.MockNotifier{}
 	txManager := mock.NewMockTxManager(taskRepo, taskLogRepo)
 	idempotencyStore := memory.NewMemoryIdempotencyStore()
+	taskCache := mock.NewMockTaskCache()
 
 	usecase := NewTaskUsecase(
 		taskRepo,
@@ -37,17 +39,18 @@ func setupTestEnvironment() (
 		userRepo,
 		teamRepo,
 		idempotencyStore,
+		taskCache,
 		txManager,
 		notifier,
 		24*time.Hour,
 	)
 
-	return usecase, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, txManager
+	return usecase, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, txManager, taskCache
 }
 
 // 5.1 Race Condition - Sequential Idempotency
 func TestIdempotency_Sequential(t *testing.T) {
-	uc, taskRepo, userRepo, _, _, _, _ := setupTestEnvironment()
+	uc, taskRepo, userRepo, _, _, _, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
 	user := &domain.User{UUID: uuid.New(), Name: "Alice", Email: "alice@test.com"}
@@ -95,7 +98,7 @@ func TestIdempotency_Sequential(t *testing.T) {
 
 // 5.1 Race Condition - Concurrent Duplicate (N goroutines with same Idempotency-Key)
 func TestIdempotency_ConcurrentDuplicate(t *testing.T) {
-	uc, taskRepo, userRepo, _, _, _, _ := setupTestEnvironment()
+	uc, taskRepo, userRepo, _, _, _, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
 	user := &domain.User{UUID: uuid.New(), Name: "Bob", Email: "bob@test.com"}
@@ -171,7 +174,7 @@ func TestIdempotency_ConcurrentDuplicate(t *testing.T) {
 
 // 3. Database Transaction & Integrity - Rollback on step failure
 func TestAssign_TransactionRollbackOnNotifierFailure(t *testing.T) {
-	uc, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, _ := setupTestEnvironment()
+	uc, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
 	assigner := &domain.User{UUID: uuid.New(), Name: "Alice", Email: "alice@team.com"}
@@ -216,7 +219,7 @@ func TestAssign_TransactionRollbackOnNotifierFailure(t *testing.T) {
 }
 
 func TestAssign_Success(t *testing.T) {
-	uc, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, _ := setupTestEnvironment()
+	uc, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
 	assigner := &domain.User{UUID: uuid.New(), Name: "Alice", Email: "alice@team.com"}
@@ -261,7 +264,7 @@ func TestAssign_Success(t *testing.T) {
 }
 
 func TestAssign_DifferentTeamRejected(t *testing.T) {
-	uc, taskRepo, userRepo, teamRepo, taskLogRepo, _, _ := setupTestEnvironment()
+	uc, taskRepo, userRepo, teamRepo, taskLogRepo, _, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
 	user1 := &domain.User{UUID: uuid.New(), Name: "User 1", Email: "user1@a.com"}
@@ -286,6 +289,7 @@ func TestAssign_DifferentTeamRejected(t *testing.T) {
 	}
 	_ = taskRepo.Create(ctx, task)
 
+	// Attempt assignment across different teams
 	_, err := uc.Assign(ctx, user1.ID, task.UUID, user2.UUID)
 	if err == nil {
 		t.Fatalf("expected assignment across different teams to fail, got nil")
@@ -298,5 +302,76 @@ func TestAssign_DifferentTeamRejected(t *testing.T) {
 
 	if taskLogRepo.Count() != 0 {
 		t.Fatalf("expected 0 task logs, got %d", taskLogRepo.Count())
+	}
+}
+
+func TestUpdate_InvalidatesCache(t *testing.T) {
+	uc, taskRepo, userRepo, _, _, _, _, taskCache := setupTestEnvironment()
+	ctx := context.Background()
+
+	user := &domain.User{UUID: uuid.New(), Name: "Alice", Email: "alice@test.com"}
+	_ = userRepo.Create(ctx, user)
+
+	task := &domain.Task{
+		UUID:      uuid.New(),
+		Title:     "Old Title",
+		Status:    domain.TaskStatusTodo,
+		CreatedBy: user.ID,
+	}
+	_ = taskRepo.Create(ctx, task)
+
+	// Pre-fill cache
+	_ = taskCache.Set(ctx, &domain.TaskResponse{UUID: task.UUID, Title: "Old Title"}, time.Hour)
+
+	// Update task
+	_, err := uc.Update(ctx, user.ID, task.UUID, domain.UpdateTaskInput{
+		Title:  "New Title",
+		Status: domain.TaskStatusInProgress,
+	})
+	if err != nil {
+		t.Fatalf("expected update to succeed, got: %v", err)
+	}
+
+	// Verify cache was invalidated
+	cached, _ := taskCache.Get(ctx, task.UUID)
+	if cached != nil {
+		t.Fatalf("expected cache to be invalidated on update, but found cached entry")
+	}
+	if taskCache.DeletedCount() != 1 {
+		t.Fatalf("expected 1 cache delete call, got %d", taskCache.DeletedCount())
+	}
+}
+
+func TestDelete_InvalidatesCache(t *testing.T) {
+	uc, taskRepo, userRepo, _, _, _, _, taskCache := setupTestEnvironment()
+	ctx := context.Background()
+
+	user := &domain.User{UUID: uuid.New(), Name: "Alice", Email: "alice@test.com"}
+	_ = userRepo.Create(ctx, user)
+
+	task := &domain.Task{
+		UUID:      uuid.New(),
+		Title:     "Task to Delete",
+		Status:    domain.TaskStatusTodo,
+		CreatedBy: user.ID,
+	}
+	_ = taskRepo.Create(ctx, task)
+
+	// Pre-fill cache
+	_ = taskCache.Set(ctx, &domain.TaskResponse{UUID: task.UUID, Title: "Task to Delete"}, time.Hour)
+
+	// Delete task
+	err := uc.Delete(ctx, user.ID, task.UUID)
+	if err != nil {
+		t.Fatalf("expected delete to succeed, got: %v", err)
+	}
+
+	// Verify cache was invalidated
+	cached, _ := taskCache.Get(ctx, task.UUID)
+	if cached != nil {
+		t.Fatalf("expected cache to be invalidated on delete, but found cached entry")
+	}
+	if taskCache.DeletedCount() != 1 {
+		t.Fatalf("expected 1 cache delete call, got %d", taskCache.DeletedCount())
 	}
 }

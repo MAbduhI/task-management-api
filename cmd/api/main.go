@@ -96,6 +96,7 @@ func main() {
 	taskRepo := pgrepo.NewTaskRepo(db)
 	taskLogRepo := pgrepo.NewTaskLogRepo(db)
 	idempotencyStore := redisrepo.NewRedisIdempotencyStore(rdb)
+	taskCache := redisrepo.NewRedisTaskCache(rdb)
 	notifier := notification.NewLogNotifier(logger)
 
 	authUsecase := usecase.NewAuthUsecase(userRepo, cfg.JWTSecret, cfg.JWTExpiryHours)
@@ -106,6 +107,7 @@ func main() {
 		userRepo,
 		teamRepo,
 		idempotencyStore,
+		taskCache,
 		txManager,
 		notifier,
 		cfg.IdempotencyTTL,

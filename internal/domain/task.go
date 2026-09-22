@@ -90,3 +90,9 @@ type TaskRepository interface {
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, query ListTaskQuery) (*TaskListResult, error)
 }
+
+type TaskCache interface {
+	Get(ctx context.Context, taskUUID uuid.UUID) (*TaskResponse, error)
+	Set(ctx context.Context, task *TaskResponse, ttl time.Duration) error
+	Delete(ctx context.Context, taskUUID uuid.UUID) error
+}

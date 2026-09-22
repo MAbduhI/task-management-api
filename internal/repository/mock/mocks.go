@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -393,4 +394,50 @@ func (n *MockNotifier) Send(ctx context.Context, recipientID int64, title, messa
 	}
 	n.SentCount++
 	return nil
+}
+
+// MockTaskCache
+type MockTaskCache struct {
+	mu           sync.Mutex
+	items        map[uuid.UUID]*domain.TaskResponse
+	deletedUUIDs []uuid.UUID
+}
+
+func NewMockTaskCache() *MockTaskCache {
+	return &MockTaskCache{
+		items:        make(map[uuid.UUID]*domain.TaskResponse),
+		deletedUUIDs: make([]uuid.UUID, 0),
+	}
+}
+
+func (m *MockTaskCache) Get(ctx context.Context, taskUUID uuid.UUID) (*domain.TaskResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t, ok := m.items[taskUUID]; ok {
+		copied := *t
+		return &copied, nil
+	}
+	return nil, nil
+}
+
+func (m *MockTaskCache) Set(ctx context.Context, task *domain.TaskResponse, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copied := *task
+	m.items[task.UUID] = &copied
+	return nil
+}
+
+func (m *MockTaskCache) Delete(ctx context.Context, taskUUID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.items, taskUUID)
+	m.deletedUUIDs = append(m.deletedUUIDs, taskUUID)
+	return nil
+}
+
+func (m *MockTaskCache) DeletedCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.deletedUUIDs)
 }
