@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ type TaskUsecase interface {
 	Update(ctx context.Context, currentUserID int64, taskUUID uuid.UUID, in domain.UpdateTaskInput) (*domain.TaskResponse, error)
 	Delete(ctx context.Context, currentUserID int64, taskUUID uuid.UUID) error
 	Assign(ctx context.Context, currentUserID int64, taskUUID uuid.UUID, assigneeUUID uuid.UUID) (*domain.TaskResponse, error)
+	ListLogs(ctx context.Context, currentUserID int64, taskUUID uuid.UUID) ([]domain.TaskLogResponse, error)
 }
 
 type taskUsecase struct {
@@ -291,11 +293,13 @@ func (u *taskUsecase) Assign(ctx context.Context, currentUserID int64, taskUUID 
 			return domain.ErrInternal(err)
 		}
 
-		// 6. Notify assignee (failure causes rollback)
 		if u.notifier != nil {
 			msg := fmt.Sprintf("You have been assigned to task: %s", task.Title)
 			if err := u.notifier.Send(txCtx, assignee.ID, "Task Assignment", msg); err != nil {
-				return domain.ErrInternal(fmt.Errorf("failed to send notification: %w", err))
+				slog.Warn("notification failed",
+					slog.Int64("assignee_id", assignee.ID),
+					slog.String("error", err.Error()),
+				)
 			}
 		}
 
@@ -314,6 +318,39 @@ func (u *taskUsecase) Assign(ctx context.Context, currentUserID int64, taskUUID 
 	}
 
 	return updatedTask, nil
+}
+
+func (u *taskUsecase) ListLogs(ctx context.Context, currentUserID int64, taskUUID uuid.UUID) ([]domain.TaskLogResponse, error) {
+	task, err := u.taskRepo.GetByUUID(ctx, taskUUID)
+	if err != nil {
+		return nil, domain.ErrNotFoundCustom("TASK_NOT_FOUND", "Task not found")
+	}
+
+	if !u.hasTaskAccess(task, currentUserID) {
+		return nil, domain.ErrForbid("You do not have access to this task's logs")
+	}
+
+	logs, err := u.taskLogRepo.ListByTaskID(ctx, task.ID)
+	if err != nil {
+		return nil, domain.ErrInternal(err)
+	}
+
+	var result []domain.TaskLogResponse
+	for _, l := range logs {
+		var performerUUID uuid.UUID
+		if l.Performer != nil {
+			performerUUID = l.Performer.UUID
+		}
+		result = append(result, domain.TaskLogResponse{
+			UUID:        l.UUID,
+			Action:      l.Action,
+			Details:     l.Details,
+			PerformedBy: performerUUID,
+			CreatedAt:   l.CreatedAt,
+		})
+	}
+
+	return result, nil
 }
 
 func (u *taskUsecase) hasTaskAccess(task *domain.Task, userID int64) bool {

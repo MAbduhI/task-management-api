@@ -173,7 +173,7 @@ func TestIdempotency_ConcurrentDuplicate(t *testing.T) {
 }
 
 // 3. Database Transaction & Integrity - Rollback on step failure
-func TestAssign_TransactionRollbackOnNotifierFailure(t *testing.T) {
+func TestAssign_NotifierFailureDoesNotRollback(t *testing.T) {
 	uc, taskRepo, userRepo, teamRepo, taskLogRepo, notifier, _, _ := setupTestEnvironment()
 	ctx := context.Background()
 
@@ -196,25 +196,24 @@ func TestAssign_TransactionRollbackOnNotifierFailure(t *testing.T) {
 	}
 	_ = taskRepo.Create(ctx, task)
 
-	// Simulate notifier failure
 	notifier.ShouldErr = true
 
-	// Attempt assignment
-	_, err := uc.Assign(ctx, assigner.ID, task.UUID, assignee.UUID)
-	if err == nil {
-		t.Fatalf("expected assignment to fail due to notifier error, but got nil")
+	resp, err := uc.Assign(ctx, assigner.ID, task.UUID, assignee.UUID)
+	if err != nil {
+		t.Fatalf("expected assignment to succeed despite notifier error, got: %v", err)
 	}
 
-	// Verify TRANSACTION ROLLBACK:
-	// 1. Task assignee_id must still be nil
+	if resp.AssigneeUUID == nil || *resp.AssigneeUUID != assignee.UUID {
+		t.Fatalf("expected assignee UUID %v, got %v", assignee.UUID, resp.AssigneeUUID)
+	}
+
 	taskAfter, _ := taskRepo.GetByUUID(ctx, task.UUID)
-	if taskAfter.AssigneeID != nil {
-		t.Fatalf("TRANSACTION ROLLBACK FAILED: task.AssigneeID was updated to %v", *taskAfter.AssigneeID)
+	if taskAfter.AssigneeID == nil || *taskAfter.AssigneeID != assignee.ID {
+		t.Fatalf("expected task assignee_id to be %d", assignee.ID)
 	}
 
-	// 2. Task log must NOT be created
-	if taskLogRepo.Count() != 0 {
-		t.Fatalf("TRANSACTION ROLLBACK FAILED: task log was committed, count = %d", taskLogRepo.Count())
+	if taskLogRepo.Count() != 1 {
+		t.Fatalf("expected 1 task log (audit committed), got %d", taskLogRepo.Count())
 	}
 }
 

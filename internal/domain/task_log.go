@@ -24,3 +24,11 @@ type TaskLogRepository interface {
 	Create(ctx context.Context, log *TaskLog) error
 	ListByTaskID(ctx context.Context, taskID int64) ([]TaskLog, error)
 }
+
+type TaskLogResponse struct {
+	UUID        uuid.UUID `json:"uuid"`
+	Action      string    `json:"action"`
+	Details     string    `json:"details"`
+	PerformedBy uuid.UUID `json:"performed_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}

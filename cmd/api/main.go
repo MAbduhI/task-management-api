@@ -61,17 +61,18 @@ func main() {
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(10 * time.Minute)
 
-	// Auto-migrate tables
-	if err := db.AutoMigrate(
-		&domain.User{},
-		&domain.Team{},
-		&domain.TeamMember{},
-		&domain.Task{},
-		&domain.TaskLog{},
-		&domain.IdempotencyRecord{},
-	); err != nil {
-		logger.Error("database migration failed", slog.String("error", err.Error()))
-		os.Exit(1)
+	if !cfg.IsProduction() {
+		if err := db.AutoMigrate(
+			&domain.User{},
+			&domain.Team{},
+			&domain.TeamMember{},
+			&domain.Task{},
+			&domain.TaskLog{},
+			&domain.IdempotencyRecord{},
+		); err != nil {
+			logger.Error("database migration failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
 	}
 
 	// 3. Connect to Redis
@@ -116,7 +117,7 @@ func main() {
 	authHandler := delivery.NewAuthHandler(authUsecase)
 	teamHandler := delivery.NewTeamHandler(teamUsecase)
 	taskHandler := delivery.NewTaskHandler(taskUsecase)
-	systemHandler := delivery.NewSystemHandler(db, cfg.AdminKey)
+	systemHandler := delivery.NewSystemHandler(db, cfg.AdminKey, cfg.IsProduction())
 
 	router := delivery.SetupRouter(delivery.RouterConfig{
 		JWTSecret:     cfg.JWTSecret,

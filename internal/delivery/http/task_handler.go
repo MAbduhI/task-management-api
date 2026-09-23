@@ -183,6 +183,27 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	response.OK(c, gin.H{"deleted": true})
 }
 
+func (h *TaskHandler) ListLogs(c *gin.Context) {
+	taskUUID, err := uuid.Parse(c.Param("uuid"))
+	if err != nil {
+		response.Error(c, domain.ErrBadReq("INVALID_UUID", "Invalid task UUID", err))
+		return
+	}
+
+	currentUserID := middleware.GetCurrentUserID(c)
+	logs, err := h.taskUsecase.ListLogs(c.Request.Context(), currentUserID, taskUUID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if logs == nil {
+		logs = []domain.TaskLogResponse{}
+	}
+
+	response.OK(c, logs)
+}
+
 func (h *TaskHandler) Assign(c *gin.Context) {
 	taskUUID, err := uuid.Parse(c.Param("uuid"))
 	if err != nil {

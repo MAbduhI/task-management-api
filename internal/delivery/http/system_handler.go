@@ -14,16 +14,22 @@ import (
 type SystemHandler struct {
 	db       *gorm.DB
 	adminKey string
+	isProd   bool
 }
 
-func NewSystemHandler(db *gorm.DB, adminKey string) *SystemHandler {
+func NewSystemHandler(db *gorm.DB, adminKey string, isProd bool) *SystemHandler {
 	return &SystemHandler{
 		db:       db,
 		adminKey: adminKey,
+		isProd:   isProd,
 	}
 }
 
 func (h *SystemHandler) verifyAdmin(c *gin.Context) bool {
+	if h.isProd {
+		response.Error(c, domain.ErrForbid("System endpoints are disabled in production"))
+		return false
+	}
 	key := c.GetHeader("X-Admin-Key")
 	if key == "" || key != h.adminKey {
 		response.Error(c, domain.ErrForbid("Invalid or missing X-Admin-Key header"))

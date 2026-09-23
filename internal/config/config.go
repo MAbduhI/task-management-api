@@ -31,7 +31,7 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load()
 
-	return &Config{
+	cfg := &Config{
 		AppEnv:         getEnv("APP_ENV", "development"),
 		Port:           getEnv("PORT", "8080"),
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
@@ -50,6 +50,21 @@ func Load() *Config {
 		IdempotencyTTL: 24 * time.Hour,
 		AdminKey:       getEnv("ADMIN_KEY", "admin-secret-key-123"),
 	}
+
+	if cfg.IsProduction() {
+		if cfg.JWTSecret == "super-secret-jwt-key-replace-in-production" {
+			panic("JWT_SECRET must be set in production")
+		}
+		if cfg.AdminKey == "admin-secret-key-123" {
+			panic("ADMIN_KEY must be set in production")
+		}
+	}
+
+	return cfg
+}
+
+func (c *Config) IsProduction() bool {
+	return c.AppEnv == "production"
 }
 
 func getEnv(key, defaultVal string) string {

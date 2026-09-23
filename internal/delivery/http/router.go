@@ -21,6 +21,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r := gin.New()
 
 	// Global middlewares
+	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.StructuredLogger())
 	r.Use(middleware.Recovery())
@@ -69,6 +70,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 			tasks.PUT("/:uuid", cfg.TaskHandler.Update)
 			tasks.DELETE("/:uuid", cfg.TaskHandler.Delete)
 			tasks.POST("/:uuid/assign", cfg.TaskHandler.Assign)
+			tasks.GET("/:uuid/logs", cfg.TaskHandler.ListLogs)
 		}
 	}
 
